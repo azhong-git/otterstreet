@@ -80,6 +80,17 @@ async function main(): Promise<void> {
   const scheduler = new Scheduler(skills, providers, store);
 
   const app = Fastify({ logger: false });
+  // Treat an empty application/json body as {} so bodyless POSTs (e.g.
+  // /api/run) don't fail with 400 when a client still sends the JSON header.
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
+    const text = (body as string).trim();
+    if (text === "") return done(null, {});
+    try {
+      done(null, JSON.parse(text));
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
   await app.register(cors, { origin: true });
   registerRoutes(app, store, scheduler, skills);
 

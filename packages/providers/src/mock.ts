@@ -81,6 +81,7 @@ export class MockProvider implements QuoteProvider, OptionsChainProvider, BarsPr
           openInterest,
           volume: Math.round(openInterest * 0.15),
           greeks: { gamma, iv },
+          underlyingPrice: spot,
         });
       }
     }

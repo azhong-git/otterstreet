@@ -17,13 +17,14 @@ export const gexSkill: SignalSkill = {
   description:
     "Computes dealer gamma exposure by strike from options open interest: call wall, put wall, gamma flip, squeeze potential.",
   schedule: "*/5 * * * *",
-  requires: ["quotes", "options_chain"],
+  // options_chain is the hard requirement; quotes is only a fallback for
+  // providers that don't return the underlying price with the chain.
+  requires: ["options_chain"],
 
   async run(ctx: SkillContext, ticker: string): Promise<Signal[]> {
     const { quotes, optionsChain } = ctx.providers;
-    if (!quotes || !optionsChain) return [];
+    if (!optionsChain) return [];
 
-    const quote = await quotes.getQuote(ticker);
     const allExpirations = await optionsChain.getExpirations(ticker);
     const cutoff = new Date(ctx.now().getTime() + MAX_DAYS_OUT * 86_400_000)
       .toISOString()
@@ -35,7 +36,21 @@ export const gexSkill: SignalSkill = {
     }
 
     const chains = await Promise.all(expirations.map((e) => optionsChain.getChain(ticker, e)));
-    const profile = computeGexProfile(quote.last, chains.flat());
+    const contracts = chains.flat();
+
+    // Prefer the underlying spot the chain already carries (Polygon's snapshot
+    // returns it), so a single options-data plan suffices. Fall back to a
+    // separate quote only for providers that don't include it.
+    let spot = contracts.find((c) => c.underlyingPrice && c.underlyingPrice > 0)?.underlyingPrice;
+    if (spot === undefined) {
+      if (!quotes) {
+        ctx.log(`gex: no spot price available for ${ticker} (no underlying price in chain, no quote provider)`);
+        return [];
+      }
+      spot = (await quotes.getQuote(ticker)).last;
+    }
+
+    const profile = computeGexProfile(spot, contracts);
     if (profile.byStrike.length === 0) {
       ctx.log(`gex: no usable contracts (missing greeks/OI) for ${ticker}`);
       return [];

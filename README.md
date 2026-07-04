@@ -22,32 +22,32 @@ With no `POLYGON_API_KEY` set, the server falls back to the **mock provider**
 (deterministic synthetic quotes and options chains), so you can add a ticker,
 click **Run skills now**, and see GEX signals immediately.
 
-### Real market data (Polygon, free)
+### Real market data (Polygon)
 
-Polygon.io is the default provider and covers everything the skills need —
-quotes, OHLCV bars, and options chains with open interest and greeks — with a
-**single API key**.
+Polygon.io is the default provider. The GEX skill reads the options **chain
+snapshot** (open interest + greeks), and takes the underlying spot price from
+that same snapshot — so **one Options data plan covers everything**; no separate
+Stocks or Trades subscription is needed.
 
-1. Get a free API key from the [Polygon dashboard](https://polygon.io/dashboard/keys).
+1. Get an API key from the [Polygon dashboard](https://polygon.io/dashboard/keys).
 2. `cp .env.example .env`, set `POLYGON_API_KEY=...` (leave `PROVIDER=polygon`).
 3. Restart the server.
 
-**Does the free tier work?** Yes. The free "Basic" plan gives **one key for both
-stocks and options** (no separate options subscription — that split only applies
-to paid *real-time* plans) with two caveats:
-
-- **5 calls/minute.** The GEX skill uses ~5 calls per ticker, so the free tier
-  handles roughly **one ticker per minute**. The provider retries with backoff
-  on HTTP 429, so a larger watchlist just runs slower rather than failing.
-- **Delayed / end-of-day data.** This barely matters for these skills: OCC
-  publishes open interest only once daily, so GEX / call wall / max pain are
-  computed on data that's current regardless. You lose real-time *spot* price
-  precision, not the core signal.
+**Which plan?** The **free "Basic" tier does *not* work for the options skills** —
+its options access is limited to contract *reference* listings; the chain
+snapshot (OI + greeks) returns `403 NOT_AUTHORIZED`. You need the **Options
+Starter plan (~$29/mo)**, which includes the snapshot endpoint, daily open
+interest, greeks/IV, and — importantly — **unlimited API calls** (the free tier's
+5 calls/minute is why a multi-ticker watchlist also throws `429`). Options
+Starter is delayed (15-min) data, which is fine here: OCC publishes open interest
+only once daily, so GEX / call wall / max pain are computed on current data
+regardless. You do **not** need the Trades (tick-data) product — the skills use
+snapshots and pre-aggregated bars, not raw ticks.
 
 Tradier is supported as an alternative (`PROVIDER=tradier`, `TRADIER_TOKEN=...`);
-it needs a brokerage account. Providers are selected per capability
-(`QUOTES_PROVIDER`, `BARS_PROVIDER`, `OPTIONS_PROVIDER` override `PROVIDER`), so
-plans can be mixed as more providers are added.
+it needs a brokerage account but its market data is free. Providers are selected
+per capability (`QUOTES_PROVIDER`, `BARS_PROVIDER`, `OPTIONS_PROVIDER` override
+`PROVIDER`), so plans can be mixed as more providers are added.
 
 ## Architecture
 

@@ -1,7 +1,44 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type StoredSignal } from "./api";
+import { api, type RunSummary, type StoredSignal } from "./api";
 
 const REFRESH_MS = 15_000;
+
+type Status = { kind: "info" | "success" | "error"; text: string };
+
+/** Turn a run result into a one-line, human-readable status. */
+function summarizeRun(s: RunSummary): Status {
+  if (s.tickers === 0) return { kind: "info", text: "Watchlist is empty — add a ticker first." };
+
+  const errNote = summarizeErrors(s);
+  if (s.stored > 0) {
+    return {
+      kind: "success",
+      text: `Stored ${s.stored} new signal${s.stored === 1 ? "" : "s"} from ${s.skillsRun} skill${s.skillsRun === 1 ? "" : "s"} across ${s.tickers} ticker${s.tickers === 1 ? "" : "s"}.${errNote ? " " + errNote : ""}`,
+    };
+  }
+  if (errNote) return { kind: "error", text: errNote };
+  if (s.deduped > 0) {
+    return {
+      kind: "info",
+      text: `No new signals — ${s.deduped} already recorded recently (deduped within the hour).`,
+    };
+  }
+  return {
+    kind: "info",
+    text: `Ran ${s.skillsRun} skill${s.skillsRun === 1 ? "" : "s"} on ${s.tickers} ticker${s.tickers === 1 ? "" : "s"} — no signals fired this time.`,
+  };
+}
+
+function summarizeErrors(s: RunSummary): string | null {
+  if (s.errors.length === 0) return null;
+  const authFail = s.errors.some((e) => /403|NOT_AUTHORIZED/i.test(e.message));
+  const rateLimited = s.errors.some((e) => /429|exceeded the maximum/i.test(e.message));
+  const n = s.errors.length;
+  const who = `${n} ticker${n === 1 ? "" : "s"} failed`;
+  if (authFail) return `${who}: Polygon plan not authorized for options data (upgrade to Options Starter).`;
+  if (rateLimited) return `${who}: Polygon rate limit hit (free tier = 5 calls/min).`;
+  return `${who}: ${s.errors[0]!.message.slice(0, 120)}`;
+}
 
 export default function App() {
   const [watchlist, setWatchlist] = useState<string[]>([]);
@@ -9,6 +46,7 @@ export default function App() {
   const [filter, setFilter] = useState<string | undefined>(undefined);
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<Status | null>(null);
   const [running, setRunning] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -49,9 +87,13 @@ export default function App() {
 
   const runNow = async () => {
     setRunning(true);
+    setStatus({ kind: "info", text: "Running skills… (Polygon's free tier is rate-limited, so this can take a bit.)" });
     try {
-      await api.runNow();
+      const summary = await api.runNow();
       await refresh();
+      setStatus(summarizeRun(summary));
+    } catch (err) {
+      setStatus({ kind: "error", text: err instanceof Error ? err.message : String(err) });
     } finally {
       setRunning(false);
     }
@@ -60,18 +102,26 @@ export default function App() {
   return (
     <div className="layout">
       <aside className="sidebar">
-        <h1>ottostreet</h1>
-        <p className="tagline">open-source stock &amp; options signals</p>
+        <div className="sidebar-header">
+          <h1>ottostreet</h1>
+          <p className="tagline">open-source stock &amp; options signals</p>
 
-        <form onSubmit={addSymbol} className="add-form">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Add ticker (e.g. NVDA)"
-            maxLength={10}
-          />
-          <button type="submit">Add</button>
-        </form>
+          <form onSubmit={addSymbol} className="add-form">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Add ticker (e.g. NVDA)"
+              maxLength={10}
+            />
+            <button type="submit">Add</button>
+          </form>
+
+          <button className="run-now" onClick={() => void runNow()} disabled={running}>
+            {running ? "Running…" : "Run skills now"}
+          </button>
+          {status && <p className={`status ${status.kind}`}>{status.text}</p>}
+          {error && <p className="status error">{error}</p>}
+        </div>
 
         <ul className="watchlist">
           <li className={filter === undefined ? "active" : ""} onClick={() => setFilter(undefined)}>
@@ -97,11 +147,6 @@ export default function App() {
             </li>
           ))}
         </ul>
-
-        <button className="run-now" onClick={() => void runNow()} disabled={running}>
-          {running ? "Running…" : "Run skills now"}
-        </button>
-        {error && <p className="error">{error}</p>}
       </aside>
 
       <main className="feed">

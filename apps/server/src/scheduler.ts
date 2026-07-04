@@ -7,6 +7,32 @@ import {
 } from "@ottostreet/core";
 import type { Store } from "./db.js";
 
+export interface RunError {
+  skill: string;
+  ticker: string;
+  message: string;
+}
+
+export interface RunSummary {
+  /** Skills that were runnable (had their required capabilities). */
+  skillsRun: number;
+  /** Tickers on the watchlist at run time. */
+  tickers: number;
+  /** Signals produced by skills before dedupe. */
+  generated: number;
+  /** New signals actually stored. */
+  stored: number;
+  /** Signals dropped as duplicates of a recent identical signal. */
+  deduped: number;
+  errors: RunError[];
+}
+
+interface SkillRunResult {
+  generated: number;
+  stored: number;
+  errors: RunError[];
+}
+
 export class Scheduler {
   private tasks: ScheduledTask[] = [];
   private running = new Set<string>();
@@ -35,22 +61,26 @@ export class Scheduler {
   }
 
   /** Run every runnable skill against the whole watchlist once. */
-  async runAllOnce(): Promise<{ skillsRun: number; signalsStored: number }> {
-    let signalsStored = 0;
-    let skillsRun = 0;
+  async runAllOnce(): Promise<RunSummary> {
+    const tickers = this.store.listSymbols().length;
+    const summary: RunSummary = { skillsRun: 0, tickers, generated: 0, stored: 0, deduped: 0, errors: [] };
     for (const skill of this.skills) {
       if (missingCapabilities(this.providers, skill.requires).length > 0) continue;
-      skillsRun += 1;
-      signalsStored += await this.runSkill(skill);
+      summary.skillsRun += 1;
+      const result = await this.runSkill(skill);
+      summary.generated += result.generated;
+      summary.stored += result.stored;
+      summary.errors.push(...result.errors);
     }
-    return { skillsRun, signalsStored };
+    summary.deduped = summary.generated - summary.stored;
+    return summary;
   }
 
-  private async runSkill(skill: SignalSkill): Promise<number> {
+  private async runSkill(skill: SignalSkill): Promise<SkillRunResult> {
+    const result: SkillRunResult = { generated: 0, stored: 0, errors: [] };
     // Guard against a slow run overlapping the next cron tick.
-    if (this.running.has(skill.id)) return 0;
+    if (this.running.has(skill.id)) return result;
     this.running.add(skill.id);
-    let stored = 0;
     try {
       const ctx: SkillContext = {
         providers: this.providers,
@@ -60,17 +90,20 @@ export class Scheduler {
       for (const ticker of this.store.listSymbols()) {
         try {
           const signals = await skill.run(ctx, ticker);
+          result.generated += signals.length;
           for (const signal of signals) {
-            if (this.store.insertSignal(signal)) stored += 1;
+            if (this.store.insertSignal(signal)) result.stored += 1;
           }
         } catch (err) {
-          console.error(`[${skill.id}] ${ticker} failed:`, err);
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`[${skill.id}] ${ticker} failed:`, message);
+          result.errors.push({ skill: skill.id, ticker, message });
         }
       }
     } finally {
       this.running.delete(skill.id);
     }
-    if (stored > 0) console.log(`[${skill.id}] stored ${stored} new signal(s)`);
-    return stored;
+    if (result.stored > 0) console.log(`[${skill.id}] stored ${result.stored} new signal(s)`);
+    return result;
   }
 }

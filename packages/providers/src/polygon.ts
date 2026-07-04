@@ -121,6 +121,7 @@ export class PolygonProvider implements QuoteProvider, OptionsChainProvider, Bar
           last: o.last_trade?.price ?? undefined,
           volume: o.day?.volume ?? undefined,
           openInterest: o.open_interest ?? 0,
+          underlyingPrice: o.underlying_asset?.price ?? undefined,
           greeks: o.greeks
             ? {
                 delta: o.greeks.delta,

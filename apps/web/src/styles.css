@@ -35,6 +35,18 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* Pin the sidebar so its actions stay on screen while the feed scrolls. */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 0 0 auto;
 }
 
 .sidebar h1 {
@@ -87,6 +99,38 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Scroll independently so a long watchlist never hides the actions above. */
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.run-now {
+  width: 100%;
+}
+
+.status {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.status.success {
+  color: var(--bullish);
+  border-color: color-mix(in srgb, var(--bullish) 40%, var(--border));
+}
+
+.status.error {
+  color: var(--bearish);
+  border-color: color-mix(in srgb, var(--bearish) 40%, var(--border));
+}
+
+.status.info {
+  color: var(--muted);
 }
 
 .watchlist li {
@@ -117,15 +161,6 @@ button:disabled {
 
 .watchlist .remove:hover {
   color: var(--bearish);
-}
-
-.run-now {
-  margin-top: auto;
-}
-
-.error {
-  color: var(--bearish);
-  font-size: 12px;
 }
 
 .feed {

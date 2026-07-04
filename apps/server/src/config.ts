@@ -1,4 +1,14 @@
-import "dotenv/config";
+import { config as loadDotenv } from "dotenv";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+
+// Load the monorepo-root .env (where .env.example lives) regardless of the
+// process working directory — the server is launched from apps/server/, so a
+// bare `dotenv/config` would miss the root file. A package-local .env, if any,
+// is loaded too but does not override values already set from the root.
+const here = dirname(fileURLToPath(import.meta.url)); // apps/server/src
+loadDotenv({ path: resolve(here, "../../../.env") });
+loadDotenv();
 
 export type ProviderName = "mock" | "polygon" | "tradier";
 

@@ -12,11 +12,26 @@ export interface StoredSignal {
   createdAt: string;
 }
 
+export interface RunError {
+  skill: string;
+  ticker: string;
+  message: string;
+}
+
+export interface RunSummary {
+  skillsRun: number;
+  tickers: number;
+  generated: number;
+  stored: number;
+  deduped: number;
+  errors: RunError[];
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
+  // Only send a JSON content-type when there's actually a body — otherwise
+  // Fastify rejects the empty body (e.g. POST /api/run) with 400 Bad Request.
+  const headers = init?.body ? { "Content-Type": "application/json" } : undefined;
+  const res = await fetch(path, { ...init, headers: { ...headers, ...init?.headers } });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error((body as any).error ?? `${res.status} ${res.statusText}`);
@@ -37,5 +52,5 @@ export const api = {
     }),
   signals: (ticker?: string) =>
     request<StoredSignal[]>(`/api/signals${ticker ? `?ticker=${encodeURIComponent(ticker)}` : ""}`),
-  runNow: () => request<{ skillsRun: number; signalsStored: number }>("/api/run", { method: "POST" }),
+  runNow: () => request<RunSummary>("/api/run", { method: "POST" }),
 };

@@ -34,6 +34,13 @@ export interface OptionContract {
   volume?: number;
   openInterest: number;
   greeks?: Greeks;
+  /**
+   * Spot price of the underlying at the time the chain was fetched, when the
+   * provider returns it alongside the chain (e.g. Polygon's option snapshot).
+   * Lets a skill get spot without a separate quote call — and, for Polygon,
+   * without needing a separate stocks-data entitlement.
+   */
+  underlyingPrice?: number;
 }
 
 /** An OHLCV bar. `time` is the bar start, ISO 8601. */
