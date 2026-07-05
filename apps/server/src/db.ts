@@ -55,16 +55,19 @@ export class Store {
   /**
    * Insert a signal unless an identical headline from the same skill/ticker
    * was stored within `dedupeMinutes` — keeps a 5-minute poll from flooding
-   * the feed with repeats.
+   * the feed with repeats. Pass `dedupeMinutes <= 0` to always insert (used by
+   * the manual per-symbol "run fresh" action).
    */
   insertSignal(signal: Signal, dedupeMinutes = 60): boolean {
-    const since = new Date(Date.now() - dedupeMinutes * 60_000).toISOString();
-    const dupe = this.db
-      .prepare(
-        "SELECT id FROM signals WHERE skill_id = ? AND ticker = ? AND title = ? AND created_at >= ? LIMIT 1",
-      )
-      .get(signal.skillId, signal.ticker, signal.title, since);
-    if (dupe) return false;
+    if (dedupeMinutes > 0) {
+      const since = new Date(Date.now() - dedupeMinutes * 60_000).toISOString();
+      const dupe = this.db
+        .prepare(
+          "SELECT id FROM signals WHERE skill_id = ? AND ticker = ? AND title = ? AND created_at >= ? LIMIT 1",
+        )
+        .get(signal.skillId, signal.ticker, signal.title, since);
+      if (dupe) return false;
+    }
 
     this.db
       .prepare(

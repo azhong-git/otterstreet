@@ -12,6 +12,17 @@ export interface StoredSignal {
   createdAt: string;
 }
 
+export type BarInterval = "1m" | "5m" | "15m" | "1h" | "1d";
+
+export interface Bar {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
 export interface RunError {
   skill: string;
   ticker: string;
@@ -52,5 +63,11 @@ export const api = {
     }),
   signals: (ticker?: string) =>
     request<StoredSignal[]>(`/api/signals${ticker ? `?ticker=${encodeURIComponent(ticker)}` : ""}`),
-  runNow: () => request<RunSummary>("/api/run", { method: "POST" }),
+  bars: (symbol: string, interval: BarInterval) =>
+    request<Bar[]>(`/api/bars/${encodeURIComponent(symbol)}?interval=${interval}`),
+  runNow: (opts?: { ticker?: string; dedupe?: boolean }) =>
+    request<RunSummary>("/api/run", {
+      method: "POST",
+      body: opts ? JSON.stringify(opts) : undefined,
+    }),
 };

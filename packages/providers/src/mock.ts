@@ -88,24 +88,40 @@ export class MockProvider implements QuoteProvider, OptionsChainProvider, BarsPr
     return contracts;
   }
 
-  async getBars(symbol: string, _interval: BarInterval, from: string, to: string): Promise<Bar[]> {
-    const bars: Bar[] = [];
+  async getBars(symbol: string, interval: BarInterval, from: string, to: string): Promise<Bar[]> {
+    const stepMs = INTERVAL_MS[interval];
     const start = new Date(from).getTime();
     const end = new Date(to).getTime();
-    for (let t = start; t <= end; t += 60_000) {
-      const price = this.spot(symbol, new Date(t));
+    const bars: Bar[] = [];
+    // Cap the count so a wide range at a fine interval stays reasonable.
+    const maxBars = 2000;
+    const first = Math.max(start, end - maxBars * stepMs);
+    for (let t = first; t <= end; t += stepMs) {
+      const mid = this.spot(symbol, new Date(t));
+      // Synthesize a little intrabar range that wanders with the step.
+      const drift = Math.sin(t / (stepMs * 7)) * mid * 0.004;
+      const open = round2(mid - drift);
+      const close = round2(mid + drift);
       bars.push({
         time: new Date(t).toISOString(),
-        open: price,
-        high: round2(price * 1.001),
-        low: round2(price * 0.999),
-        close: price,
-        volume: 10_000,
+        open,
+        high: round2(Math.max(open, close) * 1.002),
+        low: round2(Math.min(open, close) * 0.998),
+        close,
+        volume: 10_000 + (Math.abs(Math.round(drift * 1000)) % 90_000),
       });
     }
     return bars;
   }
 }
+
+const INTERVAL_MS: Record<BarInterval, number> = {
+  "1m": 60_000,
+  "5m": 5 * 60_000,
+  "15m": 15 * 60_000,
+  "1h": 60 * 60_000,
+  "1d": 24 * 60 * 60_000,
+};
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;

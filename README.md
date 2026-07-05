@@ -22,32 +22,35 @@ With no `POLYGON_API_KEY` set, the server falls back to the **mock provider**
 (deterministic synthetic quotes and options chains), so you can add a ticker,
 click **Run skills now**, and see GEX signals immediately.
 
-### Real market data (Polygon)
+### Real market data (Polygon) — required plans
 
-Polygon.io is the default provider. The GEX skill reads the options **chain
-snapshot** (open interest + greeks), and takes the underlying spot price from
-that same snapshot — so **one Options data plan covers everything**; no separate
-Stocks or Trades subscription is needed.
+Polygon.io is the default provider. **Minimum requirement: Polygon
+[Stocks Starter](https://polygon.io/pricing) + [Options Starter](https://polygon.io/pricing)
+(~$29/mo each).** Both are needed and each covers a distinct part of the app:
 
-1. Get an API key from the [Polygon dashboard](https://polygon.io/dashboard/keys).
+| Plan | Provides | Used by |
+|---|---|---|
+| **Options Starter** | Options chain snapshot — open interest, greeks, IV | GEX / call wall / put wall / gamma flip (and future options skills) |
+| **Stocks Starter** | Underlying quote + intraday OHLCV bars | Candlestick charts, underlying spot, future technical skills (RSI, Bollinger…) |
+
+Both are 15-min delayed with **unlimited API calls** — fine for this tool, which
+is minute-cadence by design (OCC publishes open interest once daily anyway). The
+free "Basic" tier is **not supported**: it returns `403 NOT_AUTHORIZED` for the
+options chain snapshot the GEX skill depends on. You do **not** need the Trades
+(tick-data) product — the skills use snapshots and pre-aggregated bars.
+
+1. Subscribe to both Starter plans on the [Polygon dashboard](https://polygon.io/dashboard/keys).
 2. `cp .env.example .env`, set `POLYGON_API_KEY=...` (leave `PROVIDER=polygon`).
 3. Restart the server.
 
-**Which plan?** The **free "Basic" tier does *not* work for the options skills** —
-its options access is limited to contract *reference* listings; the chain
-snapshot (OI + greeks) returns `403 NOT_AUTHORIZED`. You need the **Options
-Starter plan (~$29/mo)**, which includes the snapshot endpoint, daily open
-interest, greeks/IV, and — importantly — **unlimited API calls** (the free tier's
-5 calls/minute is why a multi-ticker watchlist also throws `429`). Options
-Starter is delayed (15-min) data, which is fine here: OCC publishes open interest
-only once daily, so GEX / call wall / max pain are computed on current data
-regardless. You do **not** need the Trades (tick-data) product — the skills use
-snapshots and pre-aggregated bars, not raw ticks.
+Tradier is supported as an alternative (`PROVIDER=tradier`, `TRADIER_TOKEN=...`).
+Providers are selected per capability (`QUOTES_PROVIDER`, `BARS_PROVIDER`,
+`OPTIONS_PROVIDER` override `PROVIDER`), so plans can be mixed as more providers
+are added.
 
-Tradier is supported as an alternative (`PROVIDER=tradier`, `TRADIER_TOKEN=...`);
-it needs a brokerage account but its market data is free. Providers are selected
-per capability (`QUOTES_PROVIDER`, `BARS_PROVIDER`, `OPTIONS_PROVIDER` override
-`PROVIDER`), so plans can be mixed as more providers are added.
+> The **mock provider** (used automatically when `POLYGON_API_KEY` is unset)
+> serves deterministic synthetic data with no keys — for local development only,
+> not real signals.
 
 ## Architecture
 

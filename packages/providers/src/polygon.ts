@@ -11,9 +11,8 @@ import type {
 export interface PolygonConfig {
   apiKey: string;
   /**
-   * Max retries when throttled (HTTP 429). The free "Basic" plan allows only
-   * 5 calls/minute, so backoff keeps a multi-ticker watchlist working (slowly)
-   * instead of erroring.
+   * Retries on a transient HTTP 429. The required paid plans allow unlimited
+   * calls, so this is just insurance against occasional burst throttling.
    */
   maxRetries?: number;
 }
@@ -29,12 +28,12 @@ const AGG_TIMESPAN: Record<BarInterval, { multiplier: number; timespan: string }
 /**
  * Polygon.io market data provider (stocks + options).
  *
- * Works on the free "Basic" plan: one key covers both stocks and options with
- * delayed/end-of-day data at 5 calls/minute. Options data (open interest,
- * greeks) comes from the v3 options snapshot, which is fine for OI-based
- * positioning skills since OCC publishes open interest only once per day.
- * Real-time data requires paid Stocks/Options plans (separate subscriptions),
- * but this provider does not depend on real-time.
+ * Minimum required plans: Polygon **Stocks Starter** + **Options Starter**
+ * (~$29/mo each). Together they provide 15-minute-delayed data with unlimited
+ * API calls: Options Starter serves the v3 options snapshot (open interest +
+ * greeks) for the positioning skills, and Stocks Starter serves the underlying
+ * quote and intraday OHLCV bars for charts and technical skills. The free tier
+ * does not carry the options snapshot, so it is not supported.
  * Docs: https://polygon.io/docs
  */
 export class PolygonProvider implements QuoteProvider, OptionsChainProvider, BarsProvider {
@@ -48,7 +47,7 @@ export class PolygonProvider implements QuoteProvider, OptionsChainProvider, Bar
     this.maxRetries = config.maxRetries ?? 3;
   }
 
-  /** GET an absolute-or-relative Polygon URL, injecting the API key and retrying on 429. */
+  /** GET an absolute-or-relative Polygon URL, injecting the API key and retrying on transient 429s. */
   private async get(pathOrUrl: string): Promise<any> {
     const url = new URL(pathOrUrl.startsWith("http") ? pathOrUrl : `${this.baseUrl}${pathOrUrl}`);
     url.searchParams.set("apiKey", this.apiKey);
@@ -69,11 +68,15 @@ export class PolygonProvider implements QuoteProvider, OptionsChainProvider, Bar
     }
   }
 
-  /** Previous-day close — available on the free tier and adequate for a non-HFT tool. */
+  /**
+   * Underlying spot price from the stocks previous-close aggregate (Stocks
+   * Starter entitlement). The GEX skill normally reads spot from the options
+   * chain it already fetches; this covers the fallback and quote-only paths.
+   */
   async getQuote(symbol: string): Promise<Quote> {
     const data = await this.get(`/v2/aggs/ticker/${encodeURIComponent(symbol)}/prev?adjusted=true`);
     const r = data?.results?.[0];
-    if (!r) throw new Error(`Polygon returned no quote for ${symbol}`);
+    if (!r || typeof r.c !== "number") throw new Error(`Polygon returned no quote for ${symbol}`);
     return {
       symbol,
       last: r.c,

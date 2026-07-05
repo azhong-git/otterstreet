@@ -92,7 +92,7 @@ async function main(): Promise<void> {
     }
   });
   await app.register(cors, { origin: true });
-  registerRoutes(app, store, scheduler, skills);
+  registerRoutes(app, store, scheduler, skills, providers);
 
   scheduler.start();
   await app.listen({ port: config.port, host: "127.0.0.1" });

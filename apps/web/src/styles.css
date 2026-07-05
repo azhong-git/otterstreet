@@ -163,13 +163,84 @@ button:disabled {
   color: var(--bearish);
 }
 
+.hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
 .feed {
   padding: 24px 32px;
   max-width: 860px;
 }
 
-.feed h2 {
-  margin-top: 0;
+.feed-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feed-header h2 {
+  margin: 0;
+}
+
+.run-symbol {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.run-symbol:hover:not(:disabled) {
+  background: rgba(76, 141, 255, 0.12);
+}
+
+.chart {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 16px 0 20px;
+}
+
+.chart-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.intervals {
+  display: flex;
+  gap: 4px;
+}
+
+.intervals button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.intervals button.active {
+  background: rgba(76, 141, 255, 0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chart-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+.chart-canvas {
+  width: 100%;
 }
 
 .empty {

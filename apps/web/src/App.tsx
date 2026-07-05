@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type RunSummary, type StoredSignal } from "./api";
+import { TickerChart } from "./TickerChart";
 
 const REFRESH_MS = 15_000;
 
@@ -85,11 +86,15 @@ export default function App() {
     await refresh();
   };
 
-  const runNow = async () => {
+  const runNow = async (opts?: { ticker?: string; dedupe?: boolean }) => {
     setRunning(true);
-    setStatus({ kind: "info", text: "Running skills… (Polygon's free tier is rate-limited, so this can take a bit.)" });
+    const scope = opts?.ticker ?? "all tickers";
+    setStatus({
+      kind: "info",
+      text: `Running skills for ${scope}… (Polygon's free tier is rate-limited, so this can take a bit.)`,
+    });
     try {
-      const summary = await api.runNow();
+      const summary = await api.runNow(opts);
       await refresh();
       setStatus(summarizeRun(summary));
     } catch (err) {
@@ -119,6 +124,11 @@ export default function App() {
           <button className="run-now" onClick={() => void runNow()} disabled={running}>
             {running ? "Running…" : "Run skills now"}
           </button>
+          <p className="hint">
+            Runs every skill across all {watchlist.length} ticker{watchlist.length === 1 ? "" : "s"}.
+            Repeat signals within 1h are hidden (deduped). To force a fresh run of one ticker, select
+            it and use “Run … fresh”.
+          </p>
           {status && <p className={`status ${status.kind}`}>{status.text}</p>}
           {error && <p className="status error">{error}</p>}
         </div>
@@ -150,7 +160,20 @@ export default function App() {
       </aside>
 
       <main className="feed">
-        <h2>Signals {filter ? `— ${filter}` : ""}</h2>
+        <div className="feed-header">
+          <h2>Signals {filter ? `— ${filter}` : ""}</h2>
+          {filter && (
+            <button
+              className="run-symbol"
+              onClick={() => void runNow({ ticker: filter, dedupe: false })}
+              disabled={running}
+              title={`Run all skills for ${filter} and store every signal, ignoring the 1h dedupe window`}
+            >
+              {running ? "Running…" : `Run ${filter} fresh`}
+            </button>
+          )}
+        </div>
+        {filter && <TickerChart symbol={filter} signals={signals} />}
         {signals.length === 0 && (
           <p className="empty">
             No signals yet. Add a ticker, then hit “Run skills now” (or wait for the next scheduled

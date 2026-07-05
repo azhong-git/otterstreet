@@ -50,7 +50,7 @@ export class Scheduler {
         console.warn(`[scheduler] skill "${skill.id}" disabled — missing capabilities: ${missing.join(", ")}`);
         continue;
       }
-      this.tasks.push(cron.schedule(skill.schedule, () => void this.runSkill(skill)));
+      this.tasks.push(cron.schedule(skill.schedule, () => void this.runScheduled(skill)));
       console.log(`[scheduler] skill "${skill.id}" scheduled (${skill.schedule})`);
     }
   }
@@ -60,14 +60,28 @@ export class Scheduler {
     this.tasks = [];
   }
 
-  /** Run every runnable skill against the whole watchlist once. */
-  async runAllOnce(): Promise<RunSummary> {
-    const tickers = this.store.listSymbols().length;
-    const summary: RunSummary = { skillsRun: 0, tickers, generated: 0, stored: 0, deduped: 0, errors: [] };
+  /**
+   * Manually run runnable skills once.
+   * @param opts.ticker  Limit to one ticker; omit to run the whole watchlist.
+   * @param opts.dedupe  Default true. When false, every generated signal is
+   *                     stored even if identical to a recent one — used by the
+   *                     per-symbol "run fresh" action.
+   */
+  async runOnce(opts: { ticker?: string; dedupe?: boolean } = {}): Promise<RunSummary> {
+    const dedupe = opts.dedupe ?? true;
+    const symbols = opts.ticker ? [opts.ticker] : this.store.listSymbols();
+    const summary: RunSummary = {
+      skillsRun: 0,
+      tickers: symbols.length,
+      generated: 0,
+      stored: 0,
+      deduped: 0,
+      errors: [],
+    };
     for (const skill of this.skills) {
       if (missingCapabilities(this.providers, skill.requires).length > 0) continue;
       summary.skillsRun += 1;
-      const result = await this.runSkill(skill);
+      const result = await this.runSkill(skill, symbols, dedupe);
       summary.generated += result.generated;
       summary.stored += result.stored;
       summary.errors.push(...result.errors);
@@ -76,32 +90,41 @@ export class Scheduler {
     return summary;
   }
 
-  private async runSkill(skill: SignalSkill): Promise<SkillRunResult> {
-    const result: SkillRunResult = { generated: 0, stored: 0, errors: [] };
-    // Guard against a slow run overlapping the next cron tick.
-    if (this.running.has(skill.id)) return result;
+  /** Cron entry point: run one skill across the watchlist, guarding overlap. */
+  private async runScheduled(skill: SignalSkill): Promise<void> {
+    // Skip if a previous (slow) run of this skill is still going.
+    if (this.running.has(skill.id)) return;
     this.running.add(skill.id);
     try {
-      const ctx: SkillContext = {
-        providers: this.providers,
-        log: (msg) => console.log(`[${skill.id}] ${msg}`),
-        now: () => new Date(),
-      };
-      for (const ticker of this.store.listSymbols()) {
-        try {
-          const signals = await skill.run(ctx, ticker);
-          result.generated += signals.length;
-          for (const signal of signals) {
-            if (this.store.insertSignal(signal)) result.stored += 1;
-          }
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          console.error(`[${skill.id}] ${ticker} failed:`, message);
-          result.errors.push({ skill: skill.id, ticker, message });
-        }
-      }
+      await this.runSkill(skill, this.store.listSymbols(), true);
     } finally {
       this.running.delete(skill.id);
+    }
+  }
+
+  private async runSkill(
+    skill: SignalSkill,
+    symbols: string[],
+    dedupe: boolean,
+  ): Promise<SkillRunResult> {
+    const result: SkillRunResult = { generated: 0, stored: 0, errors: [] };
+    const ctx: SkillContext = {
+      providers: this.providers,
+      log: (msg) => console.log(`[${skill.id}] ${msg}`),
+      now: () => new Date(),
+    };
+    for (const ticker of symbols) {
+      try {
+        const signals = await skill.run(ctx, ticker);
+        result.generated += signals.length;
+        for (const signal of signals) {
+          if (this.store.insertSignal(signal, dedupe ? 60 : 0)) result.stored += 1;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[${skill.id}] ${ticker} failed:`, message);
+        result.errors.push({ skill: skill.id, ticker, message });
+      }
     }
     if (result.stored > 0) console.log(`[${skill.id}] stored ${result.stored} new signal(s)`);
     return result;
