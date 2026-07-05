@@ -6,6 +6,8 @@ bullish/bearish signals with plain-language rationale. LLM-assisted skills (news
 social sentiment) use your own OpenAI API key. Not high-frequency by design —
 minute-cadence polling, human-in-the-loop trading.
 
+![ottostreet: a watchlist sidebar beside an NVDA candlestick chart with GEX call wall, put wall, and gamma-flip levels overlaid, above AI-generated bullish/bearish signal cards with plain-English rationale](docs/screenshot.png)
+
 > **Not financial advice.** Signals are heuristics over public data. Do your own research.
 
 ## Quickstart (zero API keys)
